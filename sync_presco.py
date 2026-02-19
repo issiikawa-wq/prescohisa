@@ -13,7 +13,6 @@ def login_and_download_csv():
     
     print(f"[{datetime.now()}] 処理を開始します")
     
-    # 環境変数から認証情報を取得
     email = os.environ.get('PRESCO_EMAIL')
     password = os.environ.get('PRESCO_PASSWORD')
     
@@ -23,7 +22,6 @@ def login_and_download_csv():
     print(f"[{datetime.now()}] 認証情報を確認しました")
     
     with sync_playwright() as p:
-        # ブラウザを起動（ヘッドレスモード）
         print(f"[{datetime.now()}] ブラウザを起動します")
         browser = p.chromium.launch(
             headless=True,
@@ -107,19 +105,10 @@ def login_and_download_csv():
 
 
 def extract_gclid(referrer_url):
-    """
-    リファラURLからgclidを抽出
-    
-    Args:
-        referrer_url: リファラURL
-    
-    Returns:
-        gclid の値、見つからない場合は空文字列
-    """
+    """リファラURLからgclidを抽出"""
     if not referrer_url:
         return ""
     
-    # gclid=XXX のパターンを検索
     match = re.search(r'gclid=([^&]+)', referrer_url)
     if match:
         return match.group(1)
@@ -127,49 +116,32 @@ def extract_gclid(referrer_url):
     return ""
 
 
-def datetime_to_excel_serial(date_string):
+def format_datetime_for_google(date_string):
     """
-    日付文字列をExcelのシリアル値に変換
+    日付文字列をGoogle広告の形式に変換
     
     Args:
         date_string: "2026/02/19 15:30:00" 形式の日付文字列
     
     Returns:
-        Excelのシリアル値（例: 46065.64583）
+        Google広告形式: "2026-02-19 15:30:00 +09:00"
     """
     try:
-        # 日付文字列をdatetimeオブジェクトに変換
         dt = datetime.strptime(date_string, '%Y/%m/%d %H:%M:%S')
-        
-        # Excelの基準日（1900年1月1日）との差分を計算
-        # Excelは1900年1月1日を1とする（ただし1900年をうるう年として誤って扱う）
-        excel_epoch = datetime(1899, 12, 30)  # Excelの実質的な基準日
-        delta = dt - excel_epoch
-        
-        # 日数 + 時刻の小数部分
-        serial = delta.days + (delta.seconds / 86400.0)
-        
-        return serial
+        # Google広告の推奨フォーマット
+        formatted = dt.strftime('%Y-%m-%d %H:%M:%S') + ' +09:00'
+        return formatted
         
     except Exception as e:
         print(f"[{datetime.now()}] 日付変換エラー: {date_string} - {str(e)}")
-        return ""
+        return date_string
 
 
 def transform_csv_data(csv_path, existing_gclids):
-    """
-    CSVデータを変換して出力フォーマットに整形
+    """CSVデータを変換して出力フォーマットに整形"""
     
-    Args:
-        csv_path: CSVファイルのパス
-        existing_gclids: 既存のGCLIDセット
-    
-    Returns:
-        変換されたデータ（ヘッダー含む）
-    """
     print(f"[{datetime.now()}] CSVデータの変換を開始します")
     
-    # CSVを読み込み
     encodings = ['utf-8-sig', 'utf-8', 'shift_jis', 'cp932']
     data = None
     
@@ -192,10 +164,8 @@ def transform_csv_data(csv_path, existing_gclids):
     
     print(f"[{datetime.now()}] CSVデータを読み込みました（{len(data)}行）")
     
-    # ヘッダーは無視（元のCSVのヘッダーは使わない）
     data_rows = data[1:] if len(data) > 1 else []
     
-    # 出力用のヘッダー
     output_header = [
         "Google Click ID",
         "Conversion Name",
@@ -214,56 +184,39 @@ def transform_csv_data(csv_path, existing_gclids):
     new_count = 0
     
     for row in data_rows:
-        # 列数チェック
-        if len(row) < 13:  # M列（インデックス12）まで必要
+        if len(row) < 13:
             continue
         
-        # F列（インデックス5）: サイト名
         site_name = row[5] if len(row) > 5 else ""
         
-        # サイト名でフィルタリング
         if site_name != target_site_name:
             filtered_count += 1
             continue
         
-        # M列（インデックス12）: リファラ
         referrer = row[12] if len(row) > 12 else ""
-        
-        # A列: Google Click ID（gclidを抽出）
         gclid = extract_gclid(referrer)
         
-        # gclidがない場合はスキップ
         if not gclid:
             no_gclid_count += 1
             continue
         
-        # 重複チェック
         if gclid in existing_gclids:
             duplicate_count += 1
             continue
         
-        # D列（インデックス3）: 成果発生日時
         action_datetime = row[3] if len(row) > 3 else ""
         
-        # B列: Conversion Name（固定値）
         conversion_name = "看護基本"
-        
-        # C列: Conversion Time（Excelシリアル値）
-        conversion_time = datetime_to_excel_serial(action_datetime)
-        
-        # D列: Conversion Value（固定値）
+        conversion_time = format_datetime_for_google(action_datetime)
         conversion_value = "6000"
-        
-        # E列: Conversion Currency（固定値）
         conversion_currency = "JPY"
         
-        # 出力行を作成
         output_row = [
-            gclid,              # A列: Google Click ID
-            conversion_name,    # B列: Conversion Name
-            conversion_time,    # C列: Conversion Time
-            conversion_value,   # D列: Conversion Value
-            conversion_currency # E列: Conversion Currency
+            gclid,
+            conversion_name,
+            conversion_time,
+            conversion_value,
+            conversion_currency
         ]
         
         transformed_data.append(output_row)
@@ -288,7 +241,6 @@ def upload_to_spreadsheet(csv_path):
     
     print(f"[{datetime.now()}] Google Sheetsへのアップロードを開始します")
     
-    # Google Sheets認証情報を取得
     creds_json = os.environ.get('GOOGLE_CREDENTIALS')
     if not creds_json:
         raise Exception("環境変数 GOOGLE_CREDENTIALS が設定されていません")
@@ -316,7 +268,6 @@ def upload_to_spreadsheet(csv_path):
         worksheet = spreadsheet.add_worksheet(title=sheet_name, rows=1000, cols=10)
         print(f"[{datetime.now()}] 新しいワークシート '{sheet_name}' を作成しました")
     
-    # 既存データを取得
     existing_data = worksheet.get_all_values()
     
     if len(existing_data) == 0:
@@ -324,7 +275,6 @@ def upload_to_spreadsheet(csv_path):
         existing_gclids = set()
         has_header = False
     else:
-        # 既存のGCLIDを取得（A列、ヘッダー行を除く）
         existing_gclids = set()
         for row in existing_data[1:]:
             if len(row) > 0 and row[0]:
@@ -334,14 +284,12 @@ def upload_to_spreadsheet(csv_path):
         print(f"[{datetime.now()}] 既存GCLID数: {len(existing_gclids)}件")
         has_header = True
     
-    # CSVを変換して重複除去
     new_data = transform_csv_data(csv_path, existing_gclids)
     
     if len(new_data) == 0:
         print(f"[{datetime.now()}] 追加する新規データはありません")
         return
     
-    # ヘッダーを除いたデータ行のみ
     if has_header:
         rows_to_add = new_data[1:]
     else:
