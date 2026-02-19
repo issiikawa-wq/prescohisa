@@ -242,7 +242,7 @@ def transform_csv_data(csv_path, existing_gclids):
             duplicate_count += 1
             continue
         
-        conversion_name = "看護基本"
+        conversion_name = "看護オフラインCV"
         conversion_time = format_datetime_for_google(action_datetime)
         conversion_value = "6000"
         conversion_currency = "JPY"
