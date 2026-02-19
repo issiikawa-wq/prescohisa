@@ -127,24 +127,44 @@ def format_datetime_for_google(date_string):
         Google広告形式: "2026/02/19 15:30:00" （タイムゾーン情報なし）
     """
     try:
-        # すでに正しい形式の場合はそのまま返す
         dt = datetime.strptime(date_string, '%Y/%m/%d %H:%M:%S')
-        # YYYY/MM/DD HH:MM:SS 形式（タイムゾーン情報なし）
         formatted = dt.strftime('%Y/%m/%d %H:%M:%S')
         return formatted
         
     except Exception as e:
         print(f"[{datetime.now()}] 日付変換エラー: {date_string} - {str(e)}")
-        # エラー時もタイムゾーン情報を削除して返す
         if '+' in date_string:
             return date_string.split('+')[0].strip()
         return date_string
+
+
+def is_after_cutoff_date(date_string, cutoff_datetime):
+    """
+    日付が指定日時以降かチェック
+    
+    Args:
+        date_string: "2026/02/19 15:30:00" 形式の日付文字列
+        cutoff_datetime: カットオフ日時（datetimeオブジェクト）
+    
+    Returns:
+        True: カットオフ日時以降, False: カットオフ日時より前
+    """
+    try:
+        dt = datetime.strptime(date_string, '%Y/%m/%d %H:%M:%S')
+        return dt >= cutoff_datetime
+    except Exception as e:
+        print(f"[{datetime.now()}] 日付比較エラー: {date_string} - {str(e)}")
+        return False
 
 
 def transform_csv_data(csv_path, existing_gclids):
     """CSVデータを変換して出力フォーマットに整形"""
     
     print(f"[{datetime.now()}] CSVデータの変換を開始します")
+    
+    # カットオフ日時を設定: 2026/02/19 21:00:00
+    cutoff_datetime = datetime(2026, 2, 19, 21, 0, 0)
+    print(f"[{datetime.now()}] カットオフ日時: {cutoff_datetime.strftime('%Y/%m/%d %H:%M:%S')} 以降のデータを抽出")
     
     encodings = ['utf-8-sig', 'utf-8', 'shift_jis', 'cp932']
     data = None
@@ -170,7 +190,7 @@ def transform_csv_data(csv_path, existing_gclids):
     
     data_rows = data[1:] if len(data) > 1 else []
     
-    # 1行目: TimeZoneパラメータ（A列のみに値、他は空）
+    # 1行目: TimeZoneパラメータ
     parameter_row = ["Parameters:TimeZone=Asia/Tokyo", "", "", "", ""]
     
     # 2行目: 列ヘッダー
@@ -189,6 +209,7 @@ def transform_csv_data(csv_path, existing_gclids):
     filtered_count = 0
     duplicate_count = 0
     no_gclid_count = 0
+    date_filtered_count = 0  # 日付フィルタで除外された件数
     new_count = 0
     
     for row in data_rows:
@@ -197,8 +218,17 @@ def transform_csv_data(csv_path, existing_gclids):
         
         site_name = row[5] if len(row) > 5 else ""
         
+        # サイト名フィルタリング
         if site_name != target_site_name:
             filtered_count += 1
+            continue
+        
+        # D列（インデックス3）: 成果発生日時
+        action_datetime = row[3] if len(row) > 3 else ""
+        
+        # 日付フィルタリング: 2026/02/19 21:00:00 以降のみ
+        if not is_after_cutoff_date(action_datetime, cutoff_datetime):
+            date_filtered_count += 1
             continue
         
         referrer = row[12] if len(row) > 12 else ""
@@ -212,10 +242,7 @@ def transform_csv_data(csv_path, existing_gclids):
             duplicate_count += 1
             continue
         
-        action_datetime = row[3] if len(row) > 3 else ""
-        
-        conversion_name = "看護オフラインCV"
-        # タイムゾーン情報なしの形式
+        conversion_name = "看護基本"
         conversion_time = format_datetime_for_google(action_datetime)
         conversion_value = "6000"
         conversion_currency = "JPY"
@@ -235,12 +262,12 @@ def transform_csv_data(csv_path, existing_gclids):
     print(f"[{datetime.now()}] 変換結果:")
     print(f"  - 総データ数: {total_count}行")
     print(f"  - サイト名不一致で除外: {filtered_count}行")
+    print(f"  - 日付フィルタで除外: {date_filtered_count}行")  # 追加
     print(f"  - GCLID未検出で除外: {no_gclid_count}行")
     print(f"  - 重複で除外: {duplicate_count}行")
     print(f"  - 新規追加: {new_count}行")
     
     if new_count > 0:
-        # パラメータ行 + ヘッダー行 + データ行
         return [parameter_row, output_header] + transformed_data
     else:
         return []
@@ -314,7 +341,6 @@ def upload_to_spreadsheet(csv_path):
     
     print(f"[{datetime.now()}] {len(rows_to_add)}行を追加します（開始行: {next_row}）")
     
-    # プレーンテキストとして追加（フォーマットなし）
     worksheet.append_rows(rows_to_add, value_input_option='RAW')
     
     print(f"[{datetime.now()}] Google Sheetsへの追記が完了しました")
