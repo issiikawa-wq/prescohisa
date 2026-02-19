@@ -116,24 +116,28 @@ def extract_gclid(referrer_url):
     return ""
 
 
-def format_datetime_for_google_with_timezone(date_string):
+def format_datetime_for_google(date_string):
     """
-    日付文字列をGoogle広告の形式に変換（TimeZoneパラメータ使用時）
+    日付文字列をGoogle広告の形式に変換
     
     Args:
         date_string: "2026/02/19 15:30:00" 形式の日付文字列
     
     Returns:
-        Google広告形式: "2026/02/19 15:30:00"
+        Google広告形式: "2026/02/19 15:30:00" （タイムゾーン情報なし）
     """
     try:
+        # すでに正しい形式の場合はそのまま返す
         dt = datetime.strptime(date_string, '%Y/%m/%d %H:%M:%S')
-        # TimeZoneパラメータを指定するので、タイムゾーン情報なし
+        # YYYY/MM/DD HH:MM:SS 形式（タイムゾーン情報なし）
         formatted = dt.strftime('%Y/%m/%d %H:%M:%S')
         return formatted
         
     except Exception as e:
         print(f"[{datetime.now()}] 日付変換エラー: {date_string} - {str(e)}")
+        # エラー時もタイムゾーン情報を削除して返す
+        if '+' in date_string:
+            return date_string.split('+')[0].strip()
         return date_string
 
 
@@ -166,7 +170,7 @@ def transform_csv_data(csv_path, existing_gclids):
     
     data_rows = data[1:] if len(data) > 1 else []
     
-    # 1行目: TimeZoneパラメータ
+    # 1行目: TimeZoneパラメータ（A列のみに値、他は空）
     parameter_row = ["Parameters:TimeZone=Asia/Tokyo", "", "", "", ""]
     
     # 2行目: 列ヘッダー
@@ -211,7 +215,8 @@ def transform_csv_data(csv_path, existing_gclids):
         action_datetime = row[3] if len(row) > 3 else ""
         
         conversion_name = "看護基本"
-        conversion_time = format_datetime_for_google_with_timezone(action_datetime)
+        # タイムゾーン情報なしの形式
+        conversion_time = format_datetime_for_google(action_datetime)
         conversion_value = "6000"
         conversion_currency = "JPY"
         
@@ -275,16 +280,13 @@ def upload_to_spreadsheet(csv_path):
     
     existing_data = worksheet.get_all_values()
     
-    # 既存データの確認（パラメータ行とヘッダー行を考慮）
     if len(existing_data) <= 2:
-        # シートが空、またはヘッダーのみ
         print(f"[{datetime.now()}] シートは空です。新規データとして追加します")
         existing_gclids = set()
         has_header = False
     else:
-        # 既存のGCLIDを取得（3行目以降がデータ）
         existing_gclids = set()
-        for row in existing_data[2:]:  # パラメータ行とヘッダーをスキップ
+        for row in existing_data[2:]:
             if len(row) > 0 and row[0] and not row[0].startswith("Parameters"):
                 existing_gclids.add(row[0])
         
@@ -298,12 +300,9 @@ def upload_to_spreadsheet(csv_path):
         print(f"[{datetime.now()}] 追加する新規データはありません")
         return
     
-    # データ行のみを追加（パラメータ行とヘッダー行を除く）
     if has_header:
-        # 既存ヘッダーがある場合は、新規データの最初の2行（パラメータ+ヘッダー）を除外
         rows_to_add = new_data[2:]
     else:
-        # 既存ヘッダーがない場合は、すべて追加
         rows_to_add = new_data
     
     if len(rows_to_add) == 0:
@@ -315,7 +314,8 @@ def upload_to_spreadsheet(csv_path):
     
     print(f"[{datetime.now()}] {len(rows_to_add)}行を追加します（開始行: {next_row}）")
     
-    worksheet.append_rows(rows_to_add, value_input_option='USER_ENTERED')
+    # プレーンテキストとして追加（フォーマットなし）
+    worksheet.append_rows(rows_to_add, value_input_option='RAW')
     
     print(f"[{datetime.now()}] Google Sheetsへの追記が完了しました")
     print(f"[{datetime.now()}] スプレッドシートURL: https://docs.google.com/spreadsheets/d/{spreadsheet_id}")
