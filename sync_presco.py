@@ -24,18 +24,29 @@ def login_and_download_csv():
     with sync_playwright() as p:
         # ブラウザを起動（ヘッドレスモード）
         print(f"[{datetime.now()}] ブラウザを起動します")
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(
+            headless=True,
+            args=['--no-sandbox', '--disable-setuid-sandbox']  # GitHub Actions用
+        )
         context = browser.new_context(
             viewport={'width': 1920, 'height': 1080},
             user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         )
+        
+        # タイムアウトを60秒に延長
+        context.set_default_timeout(60000)
+        
         page = context.new_page()
         
         try:
-            # ログインページにアクセス
+            # ログインページに直接アクセス（logoutページを経由しない）
             print(f"[{datetime.now()}] ログインページにアクセスします")
-            page.goto('https://presco.ai/partner/auth/logout', wait_until='networkidle')
-            time.sleep(2)
+            page.goto('https://presco.ai/partner/', timeout=60000)
+            time.sleep(3)
+            
+            # ログインフォームが表示されるまで待機
+            page.wait_for_selector('input[name="username"]', timeout=10000)
+            print(f"[{datetime.now()}] ログインフォームを確認しました")
             
             # ログインフォームに入力
             print(f"[{datetime.now()}] ログイン情報を入力します")
@@ -44,38 +55,38 @@ def login_and_download_csv():
             
             # ログインボタンをクリック
             print(f"[{datetime.now()}] ログインボタンをクリックします")
-            page.click('input[type="submit"][value="ログイン"]')
             
-            # ログイン完了を待機
-            page.wait_for_load_state('networkidle')
+            # ナビゲーションを待機しながらクリック
+            with page.expect_navigation(timeout=60000):
+                page.click('input[type="submit"][value="ログイン"]')
+            
             time.sleep(3)
             
             # ログイン成功を確認
             current_url = page.url
             print(f"[{datetime.now()}] 現在のURL: {current_url}")
             
-            if 'login' in current_url or 'auth/logout' in current_url:
-                # スクリーンショットを保存してデバッグ
+            # ログイン後のページかどうか確認
+            if 'home' not in current_url and 'actionLog' not in current_url:
                 page.screenshot(path='/tmp/login_error.png')
-                raise Exception("ログインに失敗しました。認証情報を確認してください。")
+                raise Exception(f"ログインに失敗しました。URL: {current_url}")
             
             print(f"[{datetime.now()}] ログインに成功しました")
             
             # 成果一覧ページに移動
             print(f"[{datetime.now()}] 成果一覧ページに移動します")
-            page.goto('https://presco.ai/partner/actionLog/list', wait_until='networkidle')
-            time.sleep(3)
+            page.goto('https://presco.ai/partner/actionLog/list', timeout=60000)
+            time.sleep(5)
             
             # ページが完全に読み込まれるまで待機
-            page.wait_for_selector('#csv-link', state='visible', timeout=10000)
+            page.wait_for_selector('#csv-link', state='visible', timeout=30000)
             print(f"[{datetime.now()}] CSVダウンロードボタンを確認しました")
             
             # CSVダウンロードボタンをクリックしてダウンロード
             print(f"[{datetime.now()}] CSVダウンロードを開始します")
             
             # ダウンロード開始を待機
-            with page.expect_download(timeout=30000) as download_info:
-                # CSVダウンロードボタンをクリック
+            with page.expect_download(timeout=60000) as download_info:
                 page.click('#csv-link')
                 print(f"[{datetime.now()}] CSVダウンロードボタンをクリックしました")
             
@@ -102,6 +113,11 @@ def login_and_download_csv():
             try:
                 page.screenshot(path='/tmp/error_screenshot.png')
                 print(f"[{datetime.now()}] エラー時のスクリーンショットを保存しました")
+                # 現在のHTMLも保存
+                html_content = page.content()
+                with open('/tmp/error_page.html', 'w', encoding='utf-8') as f:
+                    f.write(html_content)
+                print(f"[{datetime.now()}] エラー時のHTMLを保存しました")
             except:
                 pass
             raise
