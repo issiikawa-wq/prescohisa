@@ -214,7 +214,7 @@ def transform_csv_data(csv_path, existing_gclids):
         
         action_datetime = row[3] if len(row) > 3 else ""
         
-        conversion_name = "看護基本"
+        conversion_name = "看護オフラインCV"
         # タイムゾーン情報なしの形式
         conversion_time = format_datetime_for_google(action_datetime)
         conversion_value = "6000"
