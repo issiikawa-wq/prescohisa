@@ -3,6 +3,7 @@ import time
 import csv
 import re
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from playwright.sync_api import sync_playwright
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
@@ -11,7 +12,7 @@ import json
 def login_and_download_csv():
     """
     Presco.aiにログインしてCSVをダウンロード
-    集計基準：成果判定日時、期間：1週間で検索
+    集計基準：成果判定日時、期間：昨日〜今日で検索
     """
     
     print(f"[{datetime.now()}] 処理を開始します")
@@ -95,29 +96,21 @@ def login_and_download_csv():
             
             time.sleep(1)
             
-            # ===== 期間を「1週間」に変更 =====
-            print(f"[{datetime.now()}] 期間を「1週間」に変更します")
+            # ===== 期間を「昨日〜今日」に変更（動的取得） =====
+            print(f"[{datetime.now()}] 期間を「昨日〜今日」に変更します")
             try:
-                selectors = [
-                    'button:has-text("1週間")',
-                    'a:has-text("1週間")',
-                    '.period-button:has-text("1週間")',
-                    '[data-period="week"]',
-                    'button[value="week"]'
-                ]
+                JST = ZoneInfo("Asia/Tokyo")
+                today = datetime.now(JST)
+                yesterday = today - timedelta(days=1)
                 
-                clicked = False
-                for selector in selectors:
-                    try:
-                        page.click(selector, timeout=3000)
-                        clicked = True
-                        print(f"[{datetime.now()}] 期間を「1週間」に変更しました")
-                        break
-                    except:
-                        continue
+                date_from = yesterday.strftime("%Y/%m/%d")
+                date_to = today.strftime("%Y/%m/%d")
+
+                # カレンダーUIを無視して直接inputのvalueを書き換える
+                page.evaluate(f'document.getElementById("dateTimeFrom").value = "{date_from}"')
+                page.evaluate(f'document.getElementById("dateTimeTo").value = "{date_to}"')
                 
-                if not clicked:
-                    print(f"[{datetime.now()}] 警告: 期間の変更に失敗（デフォルトのまま続行）")
+                print(f"[{datetime.now()}] 期間を {date_from} 〜 {date_to} に設定しました")
             except Exception as e:
                 print(f"[{datetime.now()}] 警告: 期間の変更中にエラー - {str(e)}")
             
@@ -436,7 +429,7 @@ def upload_to_spreadsheet(csv_path):
     
     new_data = transform_csv_data(csv_path, existing_gclids)
     
-    if len(new_data) == 0:
+    if not new_data or len(new_data) == 0:
         print(f"[{datetime.now()}] 追加する新規データはありません")
         return
     
