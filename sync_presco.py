@@ -200,12 +200,6 @@ def extract_gclid(referrer_url):
 def format_datetime_for_google(date_string):
     """
     日付文字列をGoogle広告の形式に変換
-    
-    Args:
-        date_string: "2026/02/19 15:30:00" 形式の日付文字列
-    
-    Returns:
-        Google広告形式: "2026/02/19 15:30:00" （タイムゾーン情報なし）
     """
     try:
         dt = datetime.strptime(date_string, '%Y/%m/%d %H:%M:%S')
@@ -222,39 +216,18 @@ def format_datetime_for_google(date_string):
 def get_date_filter_range():
     """
     日付フィルタの範囲を取得
-    
-    初回実行時（2026/02/19 21:00以降）: 2026/02/19 21:00:00 以降
     通常実行時: 前日0時以降（前日分+当日分）
-    
-    Returns:
-        datetime: カットオフ日時
     """
-    # 初回実行の基準日時
     INITIAL_CUTOFF = datetime(2026, 2, 19, 21, 0, 0)
-    
-    # 現在時刻
     now = datetime.now()
-    
-    # 前日の0時を計算
     yesterday_start = (now - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-    
-    # 初回カットオフ日時と前日0時のうち、遅い方を採用
     cutoff_datetime = max(INITIAL_CUTOFF, yesterday_start)
     
     return cutoff_datetime
 
 
 def is_after_cutoff_date(date_string, cutoff_datetime):
-    """
-    日付が指定日時以降かチェック
-    
-    Args:
-        date_string: "2026/02/19 15:30:00" 形式の日付文字列
-        cutoff_datetime: カットオフ日時（datetimeオブジェクト）
-    
-    Returns:
-        True: カットオフ日時以降, False: カットオフ日時より前
-    """
+    """日付が指定日時以降かチェック"""
     try:
         dt = datetime.strptime(date_string, '%Y/%m/%d %H:%M:%S')
         return dt >= cutoff_datetime
@@ -268,7 +241,6 @@ def transform_csv_data(csv_path, existing_gclids):
     
     print(f"[{datetime.now()}] CSVデータの変換を開始します")
     
-    # 動的に日付フィルタ範囲を取得
     cutoff_datetime = get_date_filter_range()
     print(f"[{datetime.now()}] カットオフ日時: {cutoff_datetime.strftime('%Y/%m/%d %H:%M:%S')} 以降のデータを抽出")
     
@@ -288,14 +260,6 @@ def transform_csv_data(csv_path, existing_gclids):
     if data is None:
         raise Exception("CSVファイルの読み込みに失敗しました")
     
-    if len(data) == 0:
-        print(f"[{datetime.now()}] 警告: CSVファイルにデータがありません")
-        return []
-    
-    print(f"[{datetime.now()}] CSVデータを読み込みました（{len(data)}行）")
-    
-    data_rows = data[1:] if len(data) > 1 else []
-    
     # 1行目: TimeZoneパラメータ
     parameter_row = ["Parameters:TimeZone=Asia/Tokyo", "", "", "", ""]
     
@@ -307,6 +271,14 @@ def transform_csv_data(csv_path, existing_gclids):
         "Conversion Value",
         "Conversion Currency"
     ]
+    
+    if len(data) == 0:
+        print(f"[{datetime.now()}] 警告: CSVファイルにデータがありません")
+        return [parameter_row, output_header]
+    
+    print(f"[{datetime.now()}] CSVデータを読み込みました（{len(data)}行）")
+    
+    data_rows = data[1:] if len(data) > 1 else []
     
     transformed_data = []
     target_site_name = "Fast Baito 看護特化"
@@ -371,16 +343,14 @@ def transform_csv_data(csv_path, existing_gclids):
     print(f"  - 日付フィルタで除外: {date_filtered_count}行 （{cutoff_datetime.strftime('%Y/%m/%d %H:%M:%S')} より前）")
     print(f"  - GCLID未検出で除外: {no_gclid_count}行")
     print(f"  - 重複で除外: {duplicate_count}行")
-    print(f"  - 新規追加: {new_count}行")
+    print(f"  - 抽出件数: {new_count}行")
     
-    if new_count > 0:
-        return [parameter_row, output_header] + transformed_data
-    else:
-        return []
+    # データが0件でも、リセット用にヘッダーは返す
+    return [parameter_row, output_header] + transformed_data
 
 
 def upload_to_spreadsheet(csv_path):
-    """CSVをGoogle Spreadsheetsに追記"""
+    """CSVをGoogle Spreadsheetsに上書き（毎回リセット）"""
     
     print(f"[{datetime.now()}] Google Sheetsへのアップロードを開始します")
     
@@ -411,45 +381,19 @@ def upload_to_spreadsheet(csv_path):
         worksheet = spreadsheet.add_worksheet(title=sheet_name, rows=1000, cols=10)
         print(f"[{datetime.now()}] 新しいワークシート '{sheet_name}' を作成しました")
     
-    existing_data = worksheet.get_all_values()
-    
-    if len(existing_data) <= 2:
-        print(f"[{datetime.now()}] シートは空です。新規データとして追加します")
-        existing_gclids = set()
-        has_header = False
-    else:
-        existing_gclids = set()
-        for row in existing_data[2:]:
-            if len(row) > 0 and row[0] and not row[0].startswith("Parameters"):
-                existing_gclids.add(row[0])
-        
-        print(f"[{datetime.now()}] 既存データ: {len(existing_data)}行（ヘッダー含む）")
-        print(f"[{datetime.now()}] 既存GCLID数: {len(existing_gclids)}件")
-        has_header = True
+    # リセット方式なので既存GCLIDは空の状態で渡す（CSV内での重複のみ弾く）
+    existing_gclids = set()
     
     new_data = transform_csv_data(csv_path, existing_gclids)
     
-    if not new_data or len(new_data) == 0:
-        print(f"[{datetime.now()}] 追加する新規データはありません")
-        return
+    print(f"[{datetime.now()}] シートの中身をクリア（リセット）します")
+    worksheet.clear()
     
-    if has_header:
-        rows_to_add = new_data[2:]
-    else:
-        rows_to_add = new_data
+    if new_data and len(new_data) > 0:
+        print(f"[{datetime.now()}] 新しいデータ（{len(new_data)}行）を書き込みます")
+        worksheet.update(values=new_data, range_name="A1")
     
-    if len(rows_to_add) == 0:
-        print(f"[{datetime.now()}] 追加するデータ行はありません")
-        return
-    
-    last_row = len(existing_data)
-    next_row = last_row + 1
-    
-    print(f"[{datetime.now()}] {len(rows_to_add)}行を追加します（開始行: {next_row}）")
-    
-    worksheet.append_rows(rows_to_add, value_input_option='RAW')
-    
-    print(f"[{datetime.now()}] Google Sheetsへの追記が完了しました")
+    print(f"[{datetime.now()}] Google Sheetsの更新が完了しました")
     print(f"[{datetime.now()}] スプレッドシートURL: https://docs.google.com/spreadsheets/d/{spreadsheet_id}")
 
 
@@ -457,7 +401,7 @@ def main():
     """メイン処理"""
     try:
         print("=" * 60)
-        print(f"[{datetime.now()}] Presco自動同期を開始します（看護特化）")
+        print(f"[{datetime.now()}] Presco自動同期を開始します（看護特化・上書きモード）")
         print("=" * 60)
         
         csv_path = login_and_download_csv()
