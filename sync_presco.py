@@ -2,14 +2,17 @@ import os
 import time
 import csv
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from playwright.sync_api import sync_playwright
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import json
 
 def login_and_download_csv():
-    """Presco.aiにログインしてCSVをダウンロード"""
+    """
+    Presco.aiにログインしてCSVをダウンロード
+    集計基準：成果判定日時、期間：1週間で検索
+    """
     
     print(f"[{datetime.now()}] 処理を開始します")
     
@@ -66,6 +69,91 @@ def login_and_download_csv():
             page.goto('https://presco.ai/partner/actionLog/list', timeout=60000)
             time.sleep(5)
             
+            # ===== 集計基準を「成果判定日時」に変更 =====
+            print(f"[{datetime.now()}] 集計基準を「成果判定日時」に変更します")
+            try:
+                selectors = [
+                    'input[name="dateType"][value="judgeDate"]',
+                    'input[type="radio"][value="judgeDate"]',
+                    'label:has-text("成果判定日時")'
+                ]
+                
+                clicked = False
+                for selector in selectors:
+                    try:
+                        page.click(selector, timeout=3000)
+                        clicked = True
+                        print(f"[{datetime.now()}] 集計基準を変更しました")
+                        break
+                    except:
+                        continue
+                
+                if not clicked:
+                    print(f"[{datetime.now()}] 警告: 集計基準の変更に失敗（デフォルトのまま続行）")
+            except Exception as e:
+                print(f"[{datetime.now()}] 警告: 集計基準の変更中にエラー - {str(e)}")
+            
+            time.sleep(1)
+            
+            # ===== 期間を「1週間」に変更 =====
+            print(f"[{datetime.now()}] 期間を「1週間」に変更します")
+            try:
+                selectors = [
+                    'button:has-text("1週間")',
+                    'a:has-text("1週間")',
+                    '.period-button:has-text("1週間")',
+                    '[data-period="week"]',
+                    'button[value="week"]'
+                ]
+                
+                clicked = False
+                for selector in selectors:
+                    try:
+                        page.click(selector, timeout=3000)
+                        clicked = True
+                        print(f"[{datetime.now()}] 期間を「1週間」に変更しました")
+                        break
+                    except:
+                        continue
+                
+                if not clicked:
+                    print(f"[{datetime.now()}] 警告: 期間の変更に失敗（デフォルトのまま続行）")
+            except Exception as e:
+                print(f"[{datetime.now()}] 警告: 期間の変更中にエラー - {str(e)}")
+            
+            time.sleep(1)
+            
+            # ===== 「検索条件で絞り込む」ボタンをクリック =====
+            print(f"[{datetime.now()}] 検索条件で絞り込むをクリックします")
+            try:
+                selectors = [
+                    'button:has-text("検索条件で絞り込む")',
+                    'input[type="submit"][value="検索条件で絞り込む"]',
+                    'button.filter-button--submit',
+                    '.filter-button--submit',
+                    'button[type="submit"]'
+                ]
+                
+                clicked = False
+                for selector in selectors:
+                    try:
+                        page.click(selector, timeout=3000)
+                        clicked = True
+                        print(f"[{datetime.now()}] 検索ボタンをクリックしました")
+                        break
+                    except:
+                        continue
+                
+                if clicked:
+                    time.sleep(5)
+                    print(f"[{datetime.now()}] 検索条件を適用しました")
+                else:
+                    print(f"[{datetime.now()}] 警告: 検索ボタンのクリックに失敗")
+                    
+            except Exception as e:
+                print(f"[{datetime.now()}] 警告: 検索ボタンのクリック中にエラー - {str(e)}")
+            
+            # ===== CSVダウンロード =====
             page.wait_for_selector('#csv-link', state='visible', timeout=30000)
             print(f"[{datetime.now()}] CSVダウンロードボタンを確認しました")
             
@@ -138,6 +226,31 @@ def format_datetime_for_google(date_string):
         return date_string
 
 
+def get_date_filter_range():
+    """
+    日付フィルタの範囲を取得
+    
+    初回実行時（2026/02/19 21:00以降）: 2026/02/19 21:00:00 以降
+    通常実行時: 前日0時以降（前日分+当日分）
+    
+    Returns:
+        datetime: カットオフ日時
+    """
+    # 初回実行の基準日時
+    INITIAL_CUTOFF = datetime(2026, 2, 19, 21, 0, 0)
+    
+    # 現在時刻
+    now = datetime.now()
+    
+    # 前日の0時を計算
+    yesterday_start = (now - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    # 初回カットオフ日時と前日0時のうち、遅い方を採用
+    cutoff_datetime = max(INITIAL_CUTOFF, yesterday_start)
+    
+    return cutoff_datetime
+
+
 def is_after_cutoff_date(date_string, cutoff_datetime):
     """
     日付が指定日時以降かチェック
@@ -162,8 +275,8 @@ def transform_csv_data(csv_path, existing_gclids):
     
     print(f"[{datetime.now()}] CSVデータの変換を開始します")
     
-    # カットオフ日時を設定: 2026/02/19 21:00:00
-    cutoff_datetime = datetime(2026, 2, 19, 21, 0, 0)
+    # 動的に日付フィルタ範囲を取得
+    cutoff_datetime = get_date_filter_range()
     print(f"[{datetime.now()}] カットオフ日時: {cutoff_datetime.strftime('%Y/%m/%d %H:%M:%S')} 以降のデータを抽出")
     
     encodings = ['utf-8-sig', 'utf-8', 'shift_jis', 'cp932']
@@ -209,7 +322,7 @@ def transform_csv_data(csv_path, existing_gclids):
     filtered_count = 0
     duplicate_count = 0
     no_gclid_count = 0
-    date_filtered_count = 0  # 日付フィルタで除外された件数
+    date_filtered_count = 0
     new_count = 0
     
     for row in data_rows:
@@ -226,7 +339,7 @@ def transform_csv_data(csv_path, existing_gclids):
         # D列（インデックス3）: 成果発生日時
         action_datetime = row[3] if len(row) > 3 else ""
         
-        # 日付フィルタリング: 2026/02/19 21:00:00 以降のみ
+        # 日付フィルタリング: カットオフ日時以降のみ
         if not is_after_cutoff_date(action_datetime, cutoff_datetime):
             date_filtered_count += 1
             continue
@@ -262,7 +375,7 @@ def transform_csv_data(csv_path, existing_gclids):
     print(f"[{datetime.now()}] 変換結果:")
     print(f"  - 総データ数: {total_count}行")
     print(f"  - サイト名不一致で除外: {filtered_count}行")
-    print(f"  - 日付フィルタで除外: {date_filtered_count}行")  # 追加
+    print(f"  - 日付フィルタで除外: {date_filtered_count}行 （{cutoff_datetime.strftime('%Y/%m/%d %H:%M:%S')} より前）")
     print(f"  - GCLID未検出で除外: {no_gclid_count}行")
     print(f"  - 重複で除外: {duplicate_count}行")
     print(f"  - 新規追加: {new_count}行")
@@ -351,7 +464,7 @@ def main():
     """メイン処理"""
     try:
         print("=" * 60)
-        print(f"[{datetime.now()}] Presco自動同期を開始します")
+        print(f"[{datetime.now()}] Presco自動同期を開始します（看護特化）")
         print("=" * 60)
         
         csv_path = login_and_download_csv()
