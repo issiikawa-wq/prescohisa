@@ -291,7 +291,8 @@ def transform_csv_data(csv_path, existing_gclids):
     new_count = 0
     
     for row in data_rows:
-        if len(row) < 13:
+        # ★修正箇所1: インデックス17(18列目)にアクセスするため、18未満はスキップ
+        if len(row) < 18:
             continue
         
         site_name = row[5] if len(row) > 5 else ""
@@ -322,7 +323,13 @@ def transform_csv_data(csv_path, existing_gclids):
         
         conversion_name = "看護オフラインCV"
         conversion_time = format_datetime_for_google(action_datetime)
-        conversion_value = "6000"
+        
+        # ★修正箇所2: 成果報酬(18列目・インデックス17)を動的に取得
+        try:
+            conversion_value = str(int(float(row[17])))
+        except (ValueError, TypeError):
+            conversion_value = "0"
+            
         conversion_currency = "JPY"
         
         output_row = [
