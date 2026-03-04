@@ -1,11 +1,11 @@
 name: Presco看護レポート同期
 
 on:
-  workflow_dispatch:  # 手動実行のみ
+  workflow_dispatch:
 
 jobs:
   sync:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04  # ✅ 24.04→22.04に変更
 
     steps:
       - name: リポジトリをチェックアウト
