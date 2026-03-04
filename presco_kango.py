@@ -17,9 +17,9 @@ import json
 #  設定
 # ============================================================
 
-SPREADSHEET_ID = '1x7xkMomtb81GXqd5XF0b3_q59BuOSoHypTyyLqFWKow'
-SHEET_NAME     = 'Presco_kango'
-DATE_FROM      = '2025/12/05'   # 固定（開始日）
+SPREADSHEET_ID  = '1x7xkMomtb81GXqd5XF0b3_q59BuOSoHypTyyLqFWKow'
+SHEET_NAME      = 'Presco_kango'
+DATE_FROM       = '2025/12/01'   # 固定（開始日）
 PARTNER_SITE_ID = '37502'
 
 
@@ -102,12 +102,10 @@ def login_and_download_csv_kango():
             time.sleep(5)
 
             # ── CSVダウンロード ──
-            # 複数のセレクターを試みる（ページによって異なる可能性があるため）
             csv_selectors = [
-                '#csv-link',
-                'a[href*="csv"]',
-                'a:has-text("CSV")',
-                'button:has-text("CSV")',
+                '#report-link',                              # ✅ 最優先
+                'a:has-text("ログ集計CSVダウンロード")',      # フォールバック①
+                '#csv-link',                                 # フォールバック②
             ]
 
             csv_clicked = False
