@@ -1,11 +1,7 @@
 name: Presco Data Sync
 
 on:
-  schedule:
-    # 30分ごとに実行 (UTC時間)
-    - cron: '*/30 * * * *'
-  
-  # 手動実行を可能にする
+  # 定期実行(cron)を削除し、手動実行またはGAS(API)からの実行のみに変更
   workflow_dispatch:
 
 jobs:
