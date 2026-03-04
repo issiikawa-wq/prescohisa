@@ -1,0 +1,30 @@
+name: Presco看護レポート同期
+
+on:
+  workflow_dispatch:  # 手動実行のみ
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: リポジトリをチェックアウト
+        uses: actions/checkout@v4
+
+      - name: Pythonをセットアップ
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 依存関係をインストール
+        run: pip install -r requirements.txt
+
+      - name: Playwrightブラウザをインストール
+        run: playwright install chromium --with-deps
+
+      - name: Prescoデータを取得してスプレッドシートに出力
+        env:
+          PRESCO_EMAIL:       ${{ secrets.PRESCO_EMAIL }}
+          PRESCO_PASSWORD:    ${{ secrets.PRESCO_PASSWORD }}
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+        run: python presco_kango.py
