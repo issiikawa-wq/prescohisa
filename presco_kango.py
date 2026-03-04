@@ -1,5 +1,4 @@
 # presco_kango.py
-# Prescoの看護特化レポートをダウンロードしてスプレッドシートに上書き出力
 
 import os
 import time
@@ -19,7 +18,7 @@ import json
 
 SPREADSHEET_ID  = '1x7xkMomtb81GXqd5XF0b3_q59BuOSoHypTyyLqFWKow'
 SHEET_NAME      = 'Presco_kango'
-DATE_FROM       = '2025/12/01'   # 固定（開始日）
+DATE_FROM       = '2025/12/01'
 PARTNER_SITE_ID = '37502'
 
 
@@ -28,9 +27,6 @@ PARTNER_SITE_ID = '37502'
 # ============================================================
 
 def login_and_download_csv_kango():
-    """
-    Presco.aiにログインして看護レポートのCSVをダウンロード
-    """
     print(f"[{datetime.now()}] 処理を開始します")
 
     email    = os.environ.get('PRESCO_EMAIL')
@@ -38,9 +34,8 @@ def login_and_download_csv_kango():
     if not email or not password:
         raise Exception("環境変数 PRESCO_EMAIL, PRESCO_PASSWORD が設定されていません")
 
-    # 終了日は今日（JST）
-    JST    = ZoneInfo("Asia/Tokyo")
-    today  = datetime.now(JST)
+    JST     = ZoneInfo("Asia/Tokyo")
+    today   = datetime.now(JST)
     date_to = today.strftime("%Y/%m/%d")
 
     with sync_playwright() as p:
@@ -103,9 +98,9 @@ def login_and_download_csv_kango():
 
             # ── CSVダウンロード ──
             csv_selectors = [
-                '#report-link',                              # ✅ 最優先
-                'a:has-text("ログ集計CSVダウンロード")',      # フォールバック①
-                '#csv-link',                                 # フォールバック②
+                '#report-link',
+                'a:has-text("ログ集計CSVダウンロード")',
+                '#csv-link',
             ]
 
             csv_clicked = False
@@ -142,7 +137,7 @@ def login_and_download_csv_kango():
             print(f"[{datetime.now()}] エラー: {str(e)}")
             try:
                 page.screenshot(path='/tmp/error_kango.png')
-                print(f"[{datetime.now()}] スクリーンショットを保存しました: /tmp/error_kango.png")
+                print(f"[{datetime.now()}] スクリーンショットを保存しました")
             except:
                 pass
             raise
@@ -153,12 +148,28 @@ def login_and_download_csv_kango():
 
 
 # ============================================================
+#  CSVデータ整形（K列以降のみ抽出）
+# ============================================================
+
+def extract_columns(data):
+    """
+    A〜J列（インデックス0〜9）を除いて
+    K列以降（インデックス10〜）のみ返す
+    """
+    result = []
+    for row in data:
+        if len(row) > 10:
+            result.append(row[10:])   # K列以降
+        else:
+            result.append([])         # 列が足りない行は空行
+    return result
+
+
+# ============================================================
 #  スプレッドシートへ上書き
 # ============================================================
 
 def upload_to_spreadsheet_kango(csv_path):
-    """CSVをそのままスプレッドシートに上書き"""
-
     print(f"[{datetime.now()}] スプレッドシートへのアップロードを開始します")
 
     creds_json = os.environ.get('GOOGLE_CREDENTIALS')
@@ -175,12 +186,11 @@ def upload_to_spreadsheet_kango(csv_path):
 
     spreadsheet = gc.open_by_key(SPREADSHEET_ID)
 
-    # シートを取得（なければ作成）
     try:
         worksheet = spreadsheet.worksheet(SHEET_NAME)
         print(f"[{datetime.now()}] 既存シート '{SHEET_NAME}' を使用します")
     except:
-        worksheet = spreadsheet.add_worksheet(title=SHEET_NAME, rows=5000, cols=30)
+        worksheet = spreadsheet.add_worksheet(title=SHEET_NAME, rows=5000, cols=20)
         print(f"[{datetime.now()}] 新しいシート '{SHEET_NAME}' を作成しました")
 
     # CSVを読み込む（文字コード自動判定）
@@ -198,13 +208,21 @@ def upload_to_spreadsheet_kango(csv_path):
     if data is None:
         raise Exception("CSVファイルの読み込みに失敗しました")
 
+    # ✅ K列以降のみ抽出（A〜J列を除外）
+    filtered_data = extract_columns(data)
+    print(f"[{datetime.now()}] K列以降を抽出しました（{len(filtered_data)}行）")
+
+    # 先頭行をログで確認
+    if filtered_data:
+        print(f"[{datetime.now()}] ヘッダー確認: {filtered_data[0]}")
+
     # シートをクリアして書き込み
     print(f"[{datetime.now()}] シートをクリアして書き込みます")
     worksheet.clear()
 
-    if data:
-        worksheet.update(values=data, range_name="A1")
-        print(f"[{datetime.now()}] 書き込み完了: {len(data)}行")
+    if filtered_data:
+        worksheet.update(values=filtered_data, range_name="A1")
+        print(f"[{datetime.now()}] 書き込み完了: {len(filtered_data)}行")
 
     print(f"[{datetime.now()}] スプレッドシートURL: https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}")
 
