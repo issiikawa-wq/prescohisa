@@ -20,4 +20,4 @@ jobs:
           PRESCO_EMAIL:       ${{ secrets.PRESCO_EMAIL }}
           PRESCO_PASSWORD:    ${{ secrets.PRESCO_PASSWORD }}
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
-        run: python presco_gamesverse.py　　　　　　　　　# ② 実行ファイル名
+        run: python presco_gamesverse.py
