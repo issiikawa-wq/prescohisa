@@ -1,4 +1,4 @@
-name: PrescoGAMES VERSEレポート同期　　　　　　　　　　# ① workflow名
+name: GAMESVERSEレポート同期
 on:
   workflow_dispatch:
 jobs:
