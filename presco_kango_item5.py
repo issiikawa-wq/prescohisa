@@ -150,25 +150,7 @@ def login_and_download_csv():
 
 
 # ============================================================
-#  CSVデータ整形（K列以降のみ抽出）
-# ============================================================
-
-def extract_columns(data):
-    """
-    A〜J列（インデックス0〜9）を除いて
-    K列以降（インデックス10〜）のみ返す
-    """
-    result = []
-    for row in data:
-        if len(row) > 10:
-            result.append(row[10:])   # K列以降
-        else:
-            result.append([])         # 列が足りない行は空行
-    return result
-
-
-# ============================================================
-#  スプレッドシートへ上書き
+#  スプレッドシートへ上書き（全列そのまま書き込み）
 # ============================================================
 
 def upload_to_spreadsheet(csv_path):
@@ -192,7 +174,7 @@ def upload_to_spreadsheet(csv_path):
         worksheet = spreadsheet.worksheet(SHEET_NAME)
         print(f"[{datetime.now()}] 既存シート '{SHEET_NAME}' を使用します")
     except:
-        worksheet = spreadsheet.add_worksheet(title=SHEET_NAME, rows=5000, cols=20)
+        worksheet = spreadsheet.add_worksheet(title=SHEET_NAME, rows=5000, cols=50)
         print(f"[{datetime.now()}] 新しいシート '{SHEET_NAME}' を作成しました")
 
     # CSVを読み込む（文字コード自動判定）
@@ -210,21 +192,18 @@ def upload_to_spreadsheet(csv_path):
     if data is None:
         raise Exception("CSVファイルの読み込みに失敗しました")
 
-    # ✅ K列以降のみ抽出（A〜J列を除外）
-    filtered_data = extract_columns(data)
-    print(f"[{datetime.now()}] K列以降を抽出しました（{len(filtered_data)}行）")
-
     # 先頭行をログで確認
-    if filtered_data:
-        print(f"[{datetime.now()}] ヘッダー確認: {filtered_data[0]}")
+    if data:
+        print(f"[{datetime.now()}] ヘッダー確認: {data[0]}")
+        print(f"[{datetime.now()}] 列数: {len(data[0])}")
 
-    # シートをクリアして書き込み
+    # シートをクリアして書き込み（全列そのまま）
     print(f"[{datetime.now()}] シートをクリアして書き込みます")
     worksheet.clear()
 
-    if filtered_data:
-        worksheet.update(values=filtered_data, range_name="A1")
-        print(f"[{datetime.now()}] 書き込み完了: {len(filtered_data)}行")
+    if data:
+        worksheet.update(values=data, range_name="A1")
+        print(f"[{datetime.now()}] 書き込み完了: {len(data)}行")
 
     print(f"[{datetime.now()}] スプレッドシートURL: https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}")
 
