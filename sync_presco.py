@@ -12,7 +12,7 @@ import json
 def login_and_download_csv():
     """
     Presco.aiにログインしてCSVをダウンロード
-    集計基準：成果判定日時、期間：昨日〜今日で検索
+    集計基準：成果発生日時、期間：昨日〜今日で検索
     """
     
     print(f"[{datetime.now()}] 処理を開始します")
@@ -70,27 +70,11 @@ def login_and_download_csv():
             page.goto('https://presco.ai/partner/actionLog/list', timeout=60000)
             time.sleep(5)
             
-            # ===== 集計基準を「成果判定日時」に変更 =====
-            print(f"[{datetime.now()}] 集計基準を「成果判定日時」に変更します")
+            # ===== 集計基準を「成果発生日時」に変更 =====
+            print(f"[{datetime.now()}] 集計基準を「成果発生日時」に変更します")
             try:
-                selectors = [
-                    'input[name="dateType"][value="judgeDate"]',
-                    'input[type="radio"][value="judgeDate"]',
-                    'label:has-text("成果判定日時")'
-                ]
-                
-                clicked = False
-                for selector in selectors:
-                    try:
-                        page.click(selector, timeout=3000)
-                        clicked = True
-                        print(f"[{datetime.now()}] 集計基準を変更しました")
-                        break
-                    except:
-                        continue
-                
-                if not clicked:
-                    print(f"[{datetime.now()}] 警告: 集計基準の変更に失敗（デフォルトのまま続行）")
+                page.check('#searchType2', timeout=5000)
+                print(f"[{datetime.now()}] 集計基準を変更しました")
             except Exception as e:
                 print(f"[{datetime.now()}] 警告: 集計基準の変更中にエラー - {str(e)}")
             
